@@ -122,8 +122,19 @@ namespace AppKiller
             int sleepSec = 10; //спим после итерации
             long closeWndTimeoutSec = 60; //таймаут реакции кользователя на диалог закрытия
 
-            Regex titleRegEx = new Regex(@"Блокнот", RegexOptions.Compiled);
-            string closeWndRegEx = @"Блокнот";
+            TimeSpan exitTime = new TimeSpan(17, 30, 0); //время завершения программы
+
+//            Regex titleRegEx = new Regex(@"^АБС Finist\.\sОператор:[^\[]*\[9983\]", RegexOptions.Compiled);
+            Regex titleRegEx = new Regex(@"^АБС Finist\.\sОператор:[^\[]*\[\d{4}\]", RegexOptions.Compiled);
+            string closeWndRegEx = @"^(Завершение)|(Введите пароль)$";
+//            Regex domainUserRegEx = new Regex(@"^(ri.khalfin.*)", RegexOptions.Compiled);
+            Regex domainUserRegEx = new Regex(@"^(касс.*)|(kass.*)|(оквку.*)|(okvku.*)", RegexOptions.Compiled);
+
+            string AccountName = System.Environment.UserName.ToLower();
+            if (!domainUserRegEx.IsMatch(AccountName)) 
+            {
+                return;
+            }
 
             long closeWndTimeout = closeWndTimeoutSec * 1000; //таймаут (в миллисекундах)
             Dictionary<int, ProcInfo> procInfoDict = new Dictionary<int, ProcInfo>();
@@ -132,6 +143,11 @@ namespace AppKiller
             //Периодическая итерация
             do
             {
+                if( DateTime.Now > DateTime.Now.Date.Add(exitTime)) //вечером программа завершается.
+                {
+                    return;
+                }
+
                 //получаем новый список процессов
                 List<Process> procList = ProcessByWinTitle(titleRegEx);
 
@@ -245,6 +261,7 @@ namespace AppKiller
                             long currTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
                             if ((currTimestamp - stateTimestamp) > this.closeWndTimeout)
                             {
+                                Console.WriteLine("Kill PID: {0}", procObj.Id);
                                 procObj.Kill(); //может надо поаккуратнее, но пока так.
                             }
                         }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Mail;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -117,21 +118,55 @@ namespace AppKiller
 
     class Program
     {
+        [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         static void Main(string[] args)
         {
-            int sleepSec = 10; //спим после итерации
-            long closeWndTimeoutSec = 60; //таймаут реакции кользователя на диалог закрытия
+            //проверим что программа не запущена дважды
+            Process cProc = System.Diagnostics.Process.GetCurrentProcess();
+
+            Process[] processList = Process.GetProcessesByName(cProc.ProcessName);
+            if (processList.Length > 1)
+            {
+                return;
+            }
+
+            IntPtr h = Process.GetCurrentProcess().MainWindowHandle;
+            ShowWindow(h, 0);
+
+            //SendEmailAsync().GetAwaiter();
+
+
+            //v1
+            //int sleepSec = 10; //спим после итерации
+            //v2
+            int sleepSec = 30; //спим после итерации
+
+            // v1
+            //long closeWndTimeoutSec = 60; //таймаут реакции кользователя на диалог закрытия
+            //v2
+            //long closeWndTimeoutSec = 10 * 60; //таймаут реакции кользователя на диалог закрытия
+
+            //v3
+            long closeWndTimeoutSec = 5 * 60; //таймаут реакции кользователя на диалог закрытия
 
             TimeSpan exitTime = new TimeSpan(17, 30, 0); //время завершения программы
 
 //            Regex titleRegEx = new Regex(@"^АБС Finist\.\sОператор:[^\[]*\[9983\]", RegexOptions.Compiled);
             Regex titleRegEx = new Regex(@"^АБС Finist\.\sОператор:[^\[]*\[\d{4}\]", RegexOptions.Compiled);
             string closeWndRegEx = @"^(Завершение)|(Введите пароль)$";
-//            Regex domainUserRegEx = new Regex(@"^(ri.khalfin.*)", RegexOptions.Compiled);
-            Regex domainUserRegEx = new Regex(@"^(касс.*)|(kass.*)|(оквку.*)|(okvku.*)", RegexOptions.Compiled);
+
+            //тест на себе
+            //Regex domainUserRegEx = new Regex(@"^(ri.khalfin.*)", RegexOptions.Compiled);
+            //v1 кассиры
+            //Regex domainUserRegEx = new Regex(@"^(касс.*)|(kass.*)|(оквку.*)|(okvku.*)", RegexOptions.Compiled);
+
+            //v2 все
+            Regex domainUserRegEx = new Regex(@"^.*", RegexOptions.Compiled);
 
             string AccountName = System.Environment.UserName.ToLower();
-            if (!domainUserRegEx.IsMatch(AccountName)) 
+            if (!domainUserRegEx.IsMatch(AccountName))
             {
                 return;
             }
@@ -143,7 +178,7 @@ namespace AppKiller
             //Периодическая итерация
             do
             {
-                if( DateTime.Now > DateTime.Now.Date.Add(exitTime)) //вечером программа завершается.
+                if (DateTime.Now > DateTime.Now.Date.Add(exitTime)) //вечером программа завершается.
                 {
                     return;
                 }
@@ -219,7 +254,9 @@ namespace AppKiller
                 if (this.winState != winState) //если статус не изменялся то не обновляем
                 {
                     this.winState = winState;
-                    this.stateTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    
+                    //this.stateTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    this.stateTimestamp = DateTimeOffset.Now.Ticks;
                 }
             }
 
@@ -258,10 +295,18 @@ namespace AppKiller
                         }
                         else //иначе проверим не истек ли таймаут и кильнем процесс если истек.
                         {
-                            long currTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                            if ((currTimestamp - stateTimestamp) > this.closeWndTimeout)
+                            //long currTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                            //if ((currTimestamp - stateTimestamp) > this.closeWndTimeout)
+
+                            long currTimestamp = DateTimeOffset.Now.Ticks;
+                            double elapsedSeconds = (new TimeSpan(currTimestamp - stateTimestamp)).TotalSeconds;
+                            if (elapsedSeconds * 1000 > this.closeWndTimeout )
                             {
-                                Console.WriteLine("Kill PID: {0}", procObj.Id);
+                                Console.WriteLine("Killed PID: {0}", procObj.Id);
+
+                                //SendEmailAsync().GetAwaiter();
+                                SendEmail();
+
                                 procObj.Kill(); //может надо поаккуратнее, но пока так.
                             }
                         }
@@ -289,5 +334,26 @@ namespace AppKiller
             return procList;
         }
 
+        //private static async Task SendEmailAsync()
+        private static void SendEmail()
+        {
+            string AccountName = System.Environment.UserName.ToLower();
+            string MachineName = System.Environment.MachineName;
+
+            MailAddress from = new MailAddress(AccountName + "@tatsotsbank.ru");
+            MailAddress to = new MailAddress("ri.khalfin@tatsotsbank.ru");
+            MailMessage m = new MailMessage(from, to);
+            m.Subject = "FinistKiller Event";
+            m.Body = DateTime.Now.ToString() + " Killed Process on machine: " + MachineName;
+            SmtpClient smtp = new SmtpClient("192.168.0.150", 25);
+            //SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587);
+            //smtp.Credentials = new NetworkCredential("somemail@gmail.com", "mypassword");
+            //smtp.EnableSsl = true;
+
+            //await smtp.SendMailAsync(m);
+            smtp.Send(m);
+
+            Console.WriteLine("Письмо отправлено");
+        }
     }
 }
